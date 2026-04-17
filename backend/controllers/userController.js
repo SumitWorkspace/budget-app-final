@@ -52,3 +52,66 @@ exports.loginUser = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+// 👤 GET USER PROFILE (Get details of logged-in user)
+exports.getUserProfile = async (req, res) => {
+    try {
+        // req.user.id humein 'protect' middleware se milta hai
+        const user = await User.findById(req.user.id).select("-password"); // Password hide kar do
+        
+        if (user) {
+            res.json(user);
+        } else {
+            res.status(404).json({ message: "User not found" });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// ⚙️ UPDATE USER PROFILE (Change name or email)
+exports.updateUserProfile = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+
+        if (user) {
+            // Agar body mein naya naam/email hai toh badlo, warna purana hi rakho
+            user.name = req.body.name || user.name;
+            user.email = req.body.email || user.email;
+
+            // Agar user password badalna chahta hai
+            if (req.body.password) {
+                const salt = await bcrypt.genSalt(10);
+                user.password = await bcrypt.hash(req.body.password, salt);
+            }
+
+            const updatedUser = await user.save();
+
+            res.json({
+                _id: updatedUser._id,
+                name: updatedUser.name,
+                email: updatedUser.email,
+                // Dashboard update ke liye naya user object bhej rahe hain
+            });
+        } else {
+            res.status(404).json({ message: "User not found" });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+// ⚙️ UPDATE USER SETTINGS
+exports.updateSettings = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        // Sirf wahi settings update karo jo body mein aayi hain
+        // Spread operator use kiya hai taaki baaki settings delete na ho jayein
+        user.settings = { ...user.settings.toObject(), ...req.body.settings };
+        
+        await user.save();
+        res.json({ message: "Settings updated", settings: user.settings });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};

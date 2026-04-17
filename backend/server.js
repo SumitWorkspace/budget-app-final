@@ -5,7 +5,8 @@ require('dotenv').config();
 
 // Import Routes
 const transactionRoutes = require('./routes/transactionRoutes');
-const userRoutes = require('./routes/userRoutes'); // New: For Login/Signup
+const userRoutes = require('./routes/userRoutes');
+const statsRoutes = require('./routes/statsRoutes'); // 1. Naya Import yahan dalo
 
 const app = express();
 
@@ -14,11 +15,11 @@ app.use(express.json());
 app.use(cors()); 
 
 // --- 2. Routes ---
-// User Auth Routes (Signup/Login)
 app.use('/api/users', userRoutes);
-
-// Transaction Routes (Expenses/Income)
 app.use('/api/v1', transactionRoutes);
+
+// 2. Stats aur Insights ko register karo
+app.use('/api/stats', statsRoutes); 
 
 // --- 3. Database Connection & Server Start ---
 const PORT = process.env.PORT || 5000;
@@ -32,5 +33,7 @@ mongoose.connect(process.env.MONGO_URL)
     })
     .catch(err => {
         console.error('❌ MongoDB Connection Error:', err.message);
-        process.exit(1); // Stop server if DB connection fails
+        process.exit(1);
     });
+    const { errorHandler } = require('./middleware/errorMiddleware');
+app.use(errorHandler);
