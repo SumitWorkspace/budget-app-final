@@ -1,11 +1,17 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const sendEmail = require('../utils/sendEmail');
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
 
 // 📝 SIGNUP LOGIC
 exports.registerUser = async (req, res) => {
     try {
-        const { name, email, password } = req.body;
+        const { name, password } = req.body;
+        const email = req.body.email.trim().toLowerCase();
 
         // Check if user already exists
         const userExists = await User.findOne({ email });
@@ -31,10 +37,11 @@ exports.registerUser = async (req, res) => {
 // 🔑 LOGIN LOGIC
 exports.loginUser = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { password } = req.body;
+        const email = req.body.email.trim();
 
-        // Find User
-        const user = await User.findOne({ email });
+        // Find User case-insensitively
+        const user = await User.findOne({ email: new RegExp('^' + email + '$', 'i') });
         if (!user) return res.status(400).json({ message: "Invalid Credentials" });
 
         // Check Password
@@ -52,6 +59,51 @@ exports.loginUser = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// 🌐 GOOGLE AUTH LOGIC
+exports.googleAuth = async (req, res) => {
+    try {
+        const { credential } = req.body;
+        
+        // Verify the Google token
+        const ticket = await client.verifyIdToken({
+            idToken: credential,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        
+        const payload = ticket.getPayload();
+        const { email, name } = payload;
+        
+        // Check if user already exists
+        let user = await User.findOne({ email });
+        
+        if (!user) {
+            // Generate a random highly secure password for google users
+            const generatedPassword = crypto.randomBytes(16).toString('hex');
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(generatedPassword, salt);
+            
+            // Create the new user
+            user = await User.create({
+                name,
+                email,
+                password: hashedPassword
+            });
+        }
+        
+        // Create JWT Token
+        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+        
+        res.json({
+            token,
+            user: { id: user._id, name: user.name, email: user.email }
+        });
+    } catch (error) {
+        console.error("Google Auth Error:", error);
+        res.status(500).json({ message: "Google Authentication failed", error: error.message });
+    }
+};
+
 // 👤 GET USER PROFILE (Get details of logged-in user)
 exports.getUserProfile = async (req, res) => {
     try {
@@ -111,6 +163,80 @@ exports.updateSettings = async (req, res) => {
         
         await user.save();
         res.json({ message: "Settings updated", settings: user.settings });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// 📨 FORGOT PASSWORD
+exports.forgotPassword = async (req, res) => {
+    try {
+        const email = req.body.email.trim();
+        const user = await User.findOne({ email: new RegExp('^' + email + '$', 'i') });
+
+        if (!user) {
+            return res.status(404).json({ message: "No user found with that email" });
+        }
+
+        // Generate token
+        const resetToken = crypto.randomBytes(20).toString('hex');
+
+        // Hash token and save to database
+        user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+        user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+        await user.save({ validateBeforeSave: false });
+
+        // Create reset URL (This points to the React frontend)
+        const resetUrl = `http://localhost:5173/reset-password/${resetToken}`;
+
+        const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please click the link below to reset your password:\n\n${resetUrl}\n\nIf you did not request this, please ignore this email and your password will remain unchanged.`;
+
+        try {
+            await sendEmail({
+                email: user.email,
+                subject: 'SmartBudget Password Reset Token',
+                message
+            });
+
+            res.status(200).json({ message: 'Email sent successfully. Please check your console or inbox.' });
+        } catch (error) {
+            console.error(error);
+            user.resetPasswordToken = undefined;
+            user.resetPasswordExpire = undefined;
+            await user.save({ validateBeforeSave: false });
+            return res.status(500).json({ message: "Email could not be sent" });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// 🔄 RESET PASSWORD
+exports.resetPassword = async (req, res) => {
+    try {
+        // Get hashed token
+        const resetPasswordToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
+
+        const user = await User.findOne({
+            resetPasswordToken,
+            resetPasswordExpire: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: 'Invalid or expired token' });
+        }
+
+        // Hash the new password
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(req.body.password, salt);
+
+        // Clear reset token fields
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+        await user.save();
+
+        res.status(200).json({ message: 'Password has been reset successfully. You can now log in.' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

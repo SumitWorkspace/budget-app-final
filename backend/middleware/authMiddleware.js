@@ -6,7 +6,7 @@ const protect = async (req, res, next) => {
         try {
             token = req.headers.authorization.split(' ')[1];
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            req.user = decoded.id; // Add user ID to the request object
+            req.user = { id: decoded.id }; // Set as object so req.user.id works
             next();
         } catch (error) {
             res.status(401).json({ message: 'Not authorized, token failed' });

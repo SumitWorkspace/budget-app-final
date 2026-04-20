@@ -2,11 +2,14 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 require('dotenv').config();
+const { errorHandler } = require('./middleware/errorMiddleware');
 
 // Import Routes
 const transactionRoutes = require('./routes/transactionRoutes');
 const userRoutes = require('./routes/userRoutes');
 const statsRoutes = require('./routes/statsRoutes'); // 1. Naya Import yahan dalo
+const budgetRoutes = require('./routes/budgetRoutes');
+const goalRoutes = require('./routes/goalRoutes');
 
 const app = express();
 
@@ -20,6 +23,8 @@ app.use('/api/v1', transactionRoutes);
 
 // 2. Stats aur Insights ko register karo
 app.use('/api/stats', statsRoutes); 
+app.use('/api/budgets', budgetRoutes);
+app.use('/api/goals', goalRoutes);
 
 // --- 3. Database Connection & Server Start ---
 const PORT = process.env.PORT || 5000;
@@ -35,5 +40,5 @@ mongoose.connect(process.env.MONGO_URL)
         console.error('❌ MongoDB Connection Error:', err.message);
         process.exit(1);
     });
-    const { errorHandler } = require('./middleware/errorMiddleware');
+
 app.use(errorHandler);

@@ -43,4 +43,5 @@ export function FinanceProvider({ children }) {
 }
 
 // Custom hook — lets any component use the data easily
+// eslint-disable-next-line react-refresh/only-export-components
 export const useFinance = () => useContext(FinanceContext);

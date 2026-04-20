@@ -1,11 +1,12 @@
 const Transaction = require("../models/Transaction"); // require use karo
+const mongoose = require("mongoose");
 
 const getStats = async (req, res) => {
     try {
         const userId = req.user.id; 
 
         const stats = await Transaction.aggregate([
-            { $match: { user: new require('mongoose').Types.ObjectId(userId) } }, // ObjectId fix
+            { $match: { user: new mongoose.Types.ObjectId(userId) } }, // ObjectId fix
             {
                 $group: {
                     _id: null,

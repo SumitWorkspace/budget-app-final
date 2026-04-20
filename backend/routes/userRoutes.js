@@ -7,7 +7,10 @@ const {
     loginUser, 
     getUserProfile, 
     updateUserProfile,
-    updateSettings // 👈 Ye naya function add kiya
+    updateSettings,
+    forgotPassword,
+    resetPassword,
+    googleAuth
 } = require('../controllers/userController');
 
 // Middleware import
@@ -18,6 +21,9 @@ const { protect } = require('../middleware/authMiddleware');
 // 1. Public Routes
 router.post('/register', registerUser);
 router.post('/login', loginUser);
+router.post('/google', googleAuth);
+router.post('/forgot-password', forgotPassword);
+router.put('/reset-password/:token', resetPassword);
 
 // 2. Private Routes (Token zaroori hai)
 router.get('/profile', protect, getUserProfile);

@@ -21,7 +21,7 @@ exports.addTransaction = async (req, res) => {
             date,
             type,
             currency: currency || "INR", // Default INR agar user ne kuch nahi bheja
-            user: req.user 
+            user: req.user.id 
         });
 
         await transaction.save();
@@ -34,7 +34,7 @@ exports.addTransaction = async (req, res) => {
 // 2. Get User-Specific Transactions
 exports.getTransactions = async (req, res) => {
     try {
-        const transactions = await TransactionSchema.find({ user: req.user }).sort({ createdAt: -1 });
+        const transactions = await TransactionSchema.find({ user: req.user.id }).sort({ createdAt: -1 });
         res.status(200).json(transactions);
     } catch (error) {
         res.status(500).json({ message: 'Server Error' });
@@ -45,7 +45,7 @@ exports.getTransactions = async (req, res) => {
 exports.deleteTransaction = async (req, res) => {
     const { id } = req.params;
     try {
-        const transaction = await TransactionSchema.findOneAndDelete({ _id: id, user: req.user });
+        const transaction = await TransactionSchema.findOneAndDelete({ _id: id, user: req.user.id });
         if (!transaction) {
             return res.status(404).json({ message: 'Transaction not found or unauthorized' });
         }
@@ -58,7 +58,7 @@ exports.deleteTransaction = async (req, res) => {
 // 4. Get Smart Stats & Predictions (The "A+" Feature)
 exports.getStats = async (req, res) => {
     try {
-        const transactions = await TransactionSchema.find({ user: req.user });
+        const transactions = await TransactionSchema.find({ user: req.user.id });
         
         let totalIncome = 0;
         let totalExpenses = 0;
@@ -71,7 +71,7 @@ exports.getStats = async (req, res) => {
         const totalBalance = totalIncome - totalExpenses;
 
         // --- SMART PREDICTION LOGIC ---
-        const firstTx = await TransactionSchema.findOne({ user: req.user }).sort({ date: 1 });
+        const firstTx = await TransactionSchema.findOne({ user: req.user.id }).sort({ date: 1 });
         const today = new Date();
         const startDate = firstTx ? new Date(firstTx.date) : today;
 

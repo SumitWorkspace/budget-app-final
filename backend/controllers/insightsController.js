@@ -1,9 +1,10 @@
 const Transaction = require("../models/Transaction");
+const mongoose = require("mongoose");
 
 const getInsights = async (req, res) => {
     try {
         const userId = req.user.id;
-        const userObjId = new require('mongoose').Types.ObjectId(userId);
+        const userObjId = new mongoose.Types.ObjectId(userId);
 
         const categoryData = await Transaction.aggregate([
             { $match: { user: userObjId, type: "expense" } },

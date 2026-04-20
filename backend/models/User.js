@@ -14,6 +14,8 @@ const UserSchema = new mongoose.Schema({
         type: String, 
         required: true 
     },
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
     // --- Naya Settings Field ---
     settings: {
         theme: { 
