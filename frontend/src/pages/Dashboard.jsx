@@ -13,32 +13,41 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchAllData = async () => {
-            try {
-                setLoading(true);
-                // 1. User Profile fetch (Database se)
-                const userRes = await API.get('/api/users/profile');
-                setUser(userRes.data);
+    const fetchAllData = async () => {
+        try {
+            setLoading(true);
 
-                // 2. Stats fetch (Balance/Income/Expense)
-                const statsRes = await API.get('/api/stats');
-                setStats(statsRes.data);
+            const userRes = await API.get('/api/users/profile');
+            setUser(userRes.data);
 
-                // 3. Insights fetch (AI Smart Message)
-                const insightsRes = await API.get('/api/stats/insights');
-                setInsight(insightsRes.data);
+            const statsRes = await API.get('/api/stats');
+            setStats(statsRes.data);
 
-                // 4. Transactions fetch
-                const transRes = await API.get('/api/v1/transactions');
-                setTransactions(transRes.data.slice(0, 5)); // Top 5
-            } catch (err) {
-                console.error("Data fetch error:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
+            const insightsRes = await API.get('/api/stats/insights');
+            setInsight(insightsRes.data);
+
+            const transRes = await API.get('/api/v1/transactions');
+            setTransactions(transRes.data.slice(0, 5));
+
+        } catch (err) {
+            console.error("Data fetch error:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // 🔥 initial load
+    fetchAllData();
+
+    // 🔥 AUTO REFRESH (ADD THIS)
+    const interval = setInterval(() => {
         fetchAllData();
-    }, []);
+    }, 3000); // every 3 seconds
+
+    // 🔥 CLEANUP (IMPORTANT)
+    return () => clearInterval(interval);
+
+}, []);
 
     const handleLogout = () => {
         localStorage.clear();

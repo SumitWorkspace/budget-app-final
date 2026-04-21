@@ -10,10 +10,11 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 // 📝 SIGNUP LOGIC
 exports.registerUser = async (req, res) => {
     try {
-        const { name, password } = req.body;
+     const { name, password, phone } = req.body;
         const email = req.body.email.trim().toLowerCase();
 
         // Check if user already exists
+
         const userExists = await User.findOne({ email });
         if (userExists) return res.status(400).json({ message: "User already exists" });
 
@@ -25,7 +26,8 @@ exports.registerUser = async (req, res) => {
         const user = await User.create({
             name,
             email,
-            password: hashedPassword
+            password: hashedPassword,
+            phone
         });
 
         res.status(201).json({ message: "User registered successfully" });
