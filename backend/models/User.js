@@ -5,28 +5,36 @@ const UserSchema = new mongoose.Schema({
         type: String, 
         required: true 
     },
+
     email: { 
         type: String, 
         required: true, 
-        unique: true 
+        unique: true,
+        lowercase: true,   // ✅ FIX
+        trim: true         // ✅ FIX
     },
+
     password: { 
         type: String, 
-        required: true 
+        required: true,
+        select: false      // ✅ SECURITY FIX
     },
+
     phone: {
-  type: String,
-  required: true,
-  unique: true
-},
+        type: String,
+        required: true,
+        unique: true,
+        trim: true         // ✅ FIX
+    },
+
     resetPasswordToken: String,
     resetPasswordExpire: Date,
-    // --- Naya Settings Field ---
+
     settings: {
         theme: { 
             type: String, 
             default: 'light',
-            enum: ['light', 'dark'] // Taaki koi random value na daal sake
+            enum: ['light', 'dark']
         },
         currency: { 
             type: String, 
@@ -37,6 +45,11 @@ const UserSchema = new mongoose.Schema({
             default: true 
         }
     }
+
 }, { timestamps: true });
+
+// ✅ optional performance indexes
+UserSchema.index({ email: 1 });
+UserSchema.index({ phone: 1 });
 
 module.exports = mongoose.model('User', UserSchema);

@@ -28,7 +28,19 @@ const io = new Server(server, {
 });
 
 // 🔥 MAKE SOCKET AVAILABLE EVERYWHERE
-app.set("io", io);
+io.on("connection", (socket) => {
+    console.log("🔌 User connected:", socket.id);
+
+    // 🔥 USER JOINS THEIR OWN ROOM
+    socket.on("join", (userId) => {
+        console.log("👤 User joined room:", userId);
+        socket.join(userId);
+    });
+
+    socket.on("disconnect", () => {
+        console.log("❌ User disconnected:", socket.id);
+    });
+});
 
 // --- 1. Middlewares ---
 app.use(express.json()); 

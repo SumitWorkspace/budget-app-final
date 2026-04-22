@@ -34,7 +34,9 @@ exports.addTransaction = async (req, res) => {
 exports.getTransactions = async (req, res) => {
     try {
         // 🔥 FIX: removed user filter
-        const transactions = await TransactionSchema.find().sort({ createdAt: -1 });
+       const transactions = await TransactionSchema.find({
+  user: req.user.id
+}).sort({ createdAt: -1 });
 
         res.status(200).json(transactions);
     } catch (error) {
@@ -45,14 +47,21 @@ exports.getTransactions = async (req, res) => {
 // 3. Delete Transaction
 exports.deleteTransaction = async (req, res) => {
     const { id } = req.params;
+
     try {
-        const transaction = await TransactionSchema.findByIdAndDelete(id);
+        const transaction = await TransactionSchema.findOne({
+            _id: id,
+            user: req.user.id
+        });
 
         if (!transaction) {
             return res.status(404).json({ message: 'Transaction not found' });
         }
 
+        await transaction.deleteOne();
+
         res.status(200).json({ message: 'Transaction Deleted' });
+
     } catch (error) {
         res.status(500).json({ message: 'Server Error' });
     }
@@ -75,8 +84,9 @@ exports.getStats = async (req, res) => {
         const totalBalance = totalIncome - totalExpenses;
 
         // --- SMART PREDICTION ---
-        const firstTx = await TransactionSchema.findOne().sort({ date: 1 });
-
+        const firstTx = await TransactionSchema.findOne({
+  user: req.user.id
+}).sort({ date: 1 });
         const today = new Date();
         const startDate = firstTx ? new Date(firstTx.date) : today;
 
