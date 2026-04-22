@@ -33,7 +33,20 @@ router.post("/", async (req, res) => {
     const changes = entry?.changes?.[0];
     const message = changes?.value?.messages?.[0];
 
-    if (!message) return res.sendStatus(200);
+    // 🔥 Ignore non-text / empty
+    if (!message || message.type !== "text") {
+      return res.sendStatus(200);
+    }
+
+    // 🔥 Prevent duplicate processing
+    global.processedMessages = global.processedMessages || new Set();
+
+    if (message.id && global.processedMessages.has(message.id)) {
+      console.log("⚠️ Duplicate ignored:", message.id);
+      return res.sendStatus(200);
+    }
+
+    global.processedMessages.add(message.id);
 
     const phoneRaw = message.from;
     const text = message.text?.body?.toLowerCase();
@@ -61,20 +74,15 @@ router.post("/", async (req, res) => {
 
     const words = text.split(" ");
 
-    // Example: "spent 200 on food"
     if (text.includes("spent")) {
       type = "expense";
       amount = parseInt(words.find(w => !isNaN(w)));
       category = words[words.length - 1];
-    }
-    // Example: "received 5000 salary"
-    else if (text.includes("received")) {
+    } else if (text.includes("received")) {
       type = "income";
       amount = parseInt(words.find(w => !isNaN(w)));
       category = words[words.length - 1];
-    }
-    // Example: "food 200"
-    else if (words.length === 2 && !isNaN(words[1])) {
+    } else if (words.length === 2 && !isNaN(words[1])) {
       category = words[0];
       amount = parseInt(words[1]);
       type = "expense";
@@ -110,6 +118,7 @@ food 200`);
     // 🔹 SOCKET EMIT (USER ONLY)
     // =============================
     io.to(user._id.toString()).emit("newTransaction", {
+      _id: transaction._id,   // ✅ important for frontend dedupe
       amount,
       category,
       type
