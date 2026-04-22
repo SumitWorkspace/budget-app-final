@@ -27,6 +27,10 @@ const io = new Server(server, {
     }
 });
 
+
+// ✅ ADD THIS LINE HERE
+app.set("io", io);
+
 // 🔥 MAKE SOCKET AVAILABLE EVERYWHERE
 io.on("connection", (socket) => {
     console.log("🔌 User connected:", socket.id);
