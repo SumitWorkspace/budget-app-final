@@ -5,7 +5,7 @@ const Transaction = require("../models/Transaction");
 const axios = require("axios");
 
 // =============================
-// 🔹 VERIFY WEBHOOK (GET)
+// 🔹 VERIFY WEBHOOK
 // =============================
 router.get("/", (req, res) => {
   const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
@@ -23,35 +23,31 @@ router.get("/", (req, res) => {
 });
 
 // =============================
-// 🔹 RECEIVE MESSAGES (POST)
+// 🔹 RECEIVE MESSAGE
 // =============================
 router.post("/", async (req, res) => {
   try {
     const io = req.app.get("io");
 
-    const entry = req.body.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const message = changes?.value?.messages?.[0];
+    const message = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
-    // 🔥 Ignore non-text
     if (!message || message.type !== "text") {
       return res.sendStatus(200);
     }
 
-    // 🔥 Prevent duplicates
+    // 🔥 DUPLICATE PREVENTION
     global.processedMessages = global.processedMessages || new Set();
 
-    if (message.id && global.processedMessages.has(message.id)) {
-      console.log("⚠️ Duplicate ignored:", message.id);
+    if (global.processedMessages.has(message.id)) {
       return res.sendStatus(200);
     }
 
     global.processedMessages.add(message.id);
 
     const phoneRaw = message.from;
-    const text = message.text?.body?.toLowerCase();
+    const text = message.text.body.toLowerCase();
 
-    console.log("📩 Incoming:", phoneRaw, text);
+    console.log("📩 Incoming:", text);
 
     // =============================
     // 🔹 FIND USER
@@ -60,137 +56,168 @@ router.post("/", async (req, res) => {
     const user = await User.findOne({ phone });
 
     if (!user) {
-      console.log("❌ No user found:", phone);
+      console.log("❌ User not found:", phone);
       return res.sendStatus(200);
     }
 
     // =============================
-    // 🔹 SMART PARSER (FINAL)
+    // 🔥 SMART PARSER
     // =============================
     let amount = 0;
     let category = "general";
     let type = "expense";
 
-    // 🔥 clean text (remove ₹, commas, symbols)
-    const cleanText = text.replace(/[^a-zA-Z0-9 ]/g, "").trim();
-    const words = cleanText.split(/\s+/);
+    // clean text
+    const clean = text.replace(/[^a-zA-Z0-9 ]/g, "").trim();
+    const words = clean.split(/\s+/);
 
-    // 🔥 extract number anywhere
-    const numberMatch = cleanText.match(/\d+/);
-    if (numberMatch) {
-      amount = parseInt(numberMatch[0]);
-    }
+    // 🔥 extract number
+    const numMatch = clean.match(/\d+/);
+    if (numMatch) amount = parseInt(numMatch[0]);
 
-    // 🔥 detect type
-    if (cleanText.includes("spent")) {
-      type = "expense";
-    } else if (
-      cleanText.includes("received") ||
-      cleanText.includes("got") ||
-      cleanText.includes("salary")
-    ) {
+    // 🔥 detect income keywords
+    const incomeKeywords = [
+      "salary",
+      "income",
+      "received",
+      "got",
+      "earned",
+      "bonus",
+      "credit",
+      "credited"
+    ];
+
+    // 🔥 detect expense keywords
+    const expenseKeywords = [
+      "spent",
+      "pay",
+      "paid",
+      "debit",
+      "buy",
+      "bought"
+    ];
+
+    if (incomeKeywords.some(k => clean.includes(k))) {
       type = "income";
+    } else if (expenseKeywords.some(k => clean.includes(k))) {
+      type = "expense";
+    } else {
+      type = "expense"; // default
     }
 
-    // 🔥 detect category (last non-number word)
-    const nonNumbers = words.filter((w) => isNaN(w));
-    if (nonNumbers.length > 0) {
-      category = nonNumbers[nonNumbers.length - 1];
+    // 🔥 detect category
+    const ignoreWords = [
+      "spent",
+      "on",
+      "for",
+      "received",
+      "got",
+      "earned",
+      "paid",
+      "pay",
+      "from"
+    ];
+
+    const possible = words.filter(
+      w => isNaN(w) && !ignoreWords.includes(w)
+    );
+
+    if (possible.length > 0) {
+      category = possible[possible.length - 1];
     }
 
-    // 🔥 special case: "food 200"
+    // 🔥 fallback: "food 200"
     if (words.length === 2 && !isNaN(words[1])) {
       category = words[0];
       amount = parseInt(words[1]);
-      type = "expense";
+      type = incomeKeywords.includes(words[0]) ? "income" : "expense";
     }
 
     // =============================
-    // ❌ INVALID FORMAT
+    // ❌ INVALID CASE
     // =============================
     if (!amount) {
       await sendReply(
         phoneRaw,
-        `❌ Invalid format!
+        `❌ Couldn't understand.
 
 Try:
 💸 Spent 200 on food
 💰 Received 5000 salary
-OR:
-food 200`
+🍔 food 200`
       );
       return res.sendStatus(200);
     }
 
     // =============================
-    // 🔹 SAVE TRANSACTION
+    // 💾 SAVE TRANSACTION
     // =============================
     const transaction = await Transaction.create({
       title: category,
       amount,
       category,
-      description: "Added via WhatsApp",
+      description: "WhatsApp entry",
       date: new Date(),
       type,
-      user: user._id,
+      user: user._id
     });
 
     console.log("💾 Saved:", transaction._id);
 
     // =============================
-    // 🔹 SOCKET EMIT
+    // 🔴 SOCKET UPDATE
     // =============================
     io.to(user._id.toString()).emit("newTransaction", {
       _id: transaction._id,
       amount,
       category,
-      type,
+      type
     });
 
     // =============================
-    // 🔹 SEND REPLY
+    // 📤 SEND REPLY
     // =============================
     await sendReply(
       phoneRaw,
-      `✅ ${type === "expense" ? "Expense" : "Income"} added!
+      `✅ ${type === "income" ? "Income" : "Expense"} added
 
 ₹${amount} → ${category}`
     );
 
-    return res.sendStatus(200);
+    res.sendStatus(200);
 
-  } catch (error) {
-    console.error("❌ WhatsApp Error:", error.message);
-    return res.sendStatus(500);
+  } catch (err) {
+    console.error("❌ ERROR:", err.message);
+    res.sendStatus(500);
   }
 });
 
 // =============================
-// 🔹 SEND REPLY FUNCTION
+// 🔹 SEND WHATSAPP REPLY
 // =============================
 async function sendReply(to, message) {
   try {
-    console.log("📤 Sending reply to:", to);
+    console.log("📤 Sending reply...");
 
-    await axios.post(
+    const res = await axios.post(
       `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`,
       {
         messaging_product: "whatsapp",
         to,
-        text: { body: message },
+        text: { body: message }
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
-          "Content-Type": "application/json",
-        },
+          "Content-Type": "application/json"
+        }
       }
     );
+
+    console.log("✅ Reply sent:", res.data);
+
   } catch (err) {
-    console.error(
-      "❌ FULL ERROR:",
-      JSON.stringify(err.response?.data, null, 2)
-    );
+    console.error("❌ Reply error:", JSON.stringify(err.response?.data, null, 2));
   }
 }
 
