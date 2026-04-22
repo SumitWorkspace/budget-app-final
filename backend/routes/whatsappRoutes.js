@@ -33,12 +33,12 @@ router.post("/", async (req, res) => {
     const changes = entry?.changes?.[0];
     const message = changes?.value?.messages?.[0];
 
-    // 🔥 Ignore non-text / empty
+    // 🔥 Ignore non-text
     if (!message || message.type !== "text") {
       return res.sendStatus(200);
     }
 
-    // 🔥 Prevent duplicate processing
+    // 🔥 Prevent duplicates
     global.processedMessages = global.processedMessages || new Set();
 
     if (message.id && global.processedMessages.has(message.id)) {
@@ -57,45 +57,68 @@ router.post("/", async (req, res) => {
     // 🔹 FIND USER
     // =============================
     const phone = phoneRaw.startsWith("91") ? phoneRaw : "91" + phoneRaw;
-
     const user = await User.findOne({ phone });
 
     if (!user) {
-      console.log("❌ No user found for phone:", phone);
+      console.log("❌ No user found:", phone);
       return res.sendStatus(200);
     }
 
     // =============================
-    // 🔹 PARSE MESSAGE
+    // 🔹 SMART PARSER (FINAL)
     // =============================
     let amount = 0;
     let category = "general";
     let type = "expense";
 
-    const words = text.split(" ");
+    // 🔥 clean text (remove ₹, commas, symbols)
+    const cleanText = text.replace(/[^a-zA-Z0-9 ]/g, "").trim();
+    const words = cleanText.split(/\s+/);
 
-    if (text.includes("spent")) {
+    // 🔥 extract number anywhere
+    const numberMatch = cleanText.match(/\d+/);
+    if (numberMatch) {
+      amount = parseInt(numberMatch[0]);
+    }
+
+    // 🔥 detect type
+    if (cleanText.includes("spent")) {
       type = "expense";
-      amount = parseInt(words.find(w => !isNaN(w)));
-      category = words[words.length - 1];
-    } else if (text.includes("received")) {
+    } else if (
+      cleanText.includes("received") ||
+      cleanText.includes("got") ||
+      cleanText.includes("salary")
+    ) {
       type = "income";
-      amount = parseInt(words.find(w => !isNaN(w)));
-      category = words[words.length - 1];
-    } else if (words.length === 2 && !isNaN(words[1])) {
+    }
+
+    // 🔥 detect category (last non-number word)
+    const nonNumbers = words.filter((w) => isNaN(w));
+    if (nonNumbers.length > 0) {
+      category = nonNumbers[nonNumbers.length - 1];
+    }
+
+    // 🔥 special case: "food 200"
+    if (words.length === 2 && !isNaN(words[1])) {
       category = words[0];
       amount = parseInt(words[1]);
       type = "expense";
     }
 
+    // =============================
+    // ❌ INVALID FORMAT
+    // =============================
     if (!amount) {
-      await sendReply(phoneRaw, `❌ Invalid format!
+      await sendReply(
+        phoneRaw,
+        `❌ Invalid format!
 
 Try:
 💸 Spent 200 on food
 💰 Received 5000 salary
 OR:
-food 200`);
+food 200`
+      );
       return res.sendStatus(200);
     }
 
@@ -109,23 +132,23 @@ food 200`);
       description: "Added via WhatsApp",
       date: new Date(),
       type,
-      user: user._id
+      user: user._id,
     });
 
-    console.log("💾 Transaction saved:", transaction._id);
+    console.log("💾 Saved:", transaction._id);
 
     // =============================
-    // 🔹 SOCKET EMIT (USER ONLY)
+    // 🔹 SOCKET EMIT
     // =============================
     io.to(user._id.toString()).emit("newTransaction", {
-      _id: transaction._id,   // ✅ important for frontend dedupe
+      _id: transaction._id,
       amount,
       category,
-      type
+      type,
     });
 
     // =============================
-    // 🔹 SEND CONFIRMATION
+    // 🔹 SEND REPLY
     // =============================
     await sendReply(
       phoneRaw,
@@ -147,22 +170,27 @@ food 200`);
 // =============================
 async function sendReply(to, message) {
   try {
+    console.log("📤 Sending reply to:", to);
+
     await axios.post(
       `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`,
       {
         messaging_product: "whatsapp",
         to,
-        text: { body: message }
+        text: { body: message },
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
-          "Content-Type": "application/json"
-        }
+          "Content-Type": "application/json",
+        },
       }
     );
   } catch (err) {
-    console.error("❌ Reply Error:", err.response?.data || err.message);
+    console.error(
+      "❌ FULL ERROR:",
+      JSON.stringify(err.response?.data, null, 2)
+    );
   }
 }
 
