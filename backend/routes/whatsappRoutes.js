@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const axios = require('axios');
 
+
 require('dotenv').config();
 
 const VERIFY_TOKEN = "my_verify_token";
@@ -148,7 +149,14 @@ router.post('/', async (req, res) => {
         });
 
         console.log("💾 Transaction saved for user:", user._id);
+// 🔥 REAL-TIME UPDATE
+const io = req.app.get("io");
 
+io.emit("newTransaction", {
+    amount,
+    category,
+    type
+});
         // ===============================
         // 📩 AUTO REPLY
         // ===============================

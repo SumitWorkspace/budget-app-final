@@ -5,6 +5,10 @@ require('dotenv').config();
 const { errorHandler } = require('./middleware/errorMiddleware');
 console.log("MONGO_URI:", process.env.MONGO_URI);
 
+// 🔥 ADD THESE 2 LINES
+const http = require("http");
+const { Server } = require("socket.io");
+
 // Import Routes
 const transactionRoutes = require('./routes/transactionRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -13,7 +17,18 @@ const budgetRoutes = require('./routes/budgetRoutes');
 const goalRoutes = require('./routes/goalRoutes');
 const whatsappRoutes = require('./routes/whatsappRoutes');
 
-const app = express(); // ✅ moved BEFORE using app
+const app = express();
+
+// 🔥 ADD THIS (create server + socket)
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*"
+    }
+});
+
+// 🔥 MAKE SOCKET AVAILABLE EVERYWHERE
+app.set("io", io);
 
 // --- 1. Middlewares ---
 app.use(express.json()); 
@@ -26,7 +41,7 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/budgets', budgetRoutes);
 app.use('/api/goals', goalRoutes);
 
-// ✅ WhatsApp webhook (correct place)
+// ✅ WhatsApp webhook
 app.use('/webhook', whatsappRoutes);
 
 // --- 3. Database Connection & Server Start ---
@@ -34,7 +49,8 @@ const PORT = process.env.PORT || 5000;
 
 mongoose.connect(process.env.MONGO_URI)
     .then(() => {
-        app.listen(PORT, () => {
+        // 🔥 CHANGE THIS LINE (use server instead of app)
+        server.listen(PORT, () => {
             console.log(`🚀 Server running on http://localhost:${PORT}`);
             console.log('✅ MongoDB Connected Successfully');
         });
