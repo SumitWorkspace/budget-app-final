@@ -11,8 +11,8 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 exports.registerUser = async (req, res) => {
     try {
      const { name, password, phone } = req.body;
-        const email = req.body.email.trim().toLowerCase();
-
+        
+const email = req.body.email?.trim().toLowerCase();
         // Check if user already exists
 
         const userExists = await User.findOne({ email });
@@ -39,29 +39,53 @@ exports.registerUser = async (req, res) => {
 // 🔑 LOGIN LOGIC
 exports.loginUser = async (req, res) => {
     try {
-        const { password } = req.body;
-        const email = req.body.email.trim();
+        const { email, password } = req.body;
 
-        // Find User case-insensitively
-        const user = await User.findOne({ email: new RegExp('^' + email + '$', 'i') });
-        if (!user) return res.status(400).json({ message: "Invalid Credentials" });
+        // ✅ SAFETY CHECK
+        if (!email || !password) {
+            return res.status(400).json({ message: "Email & password required" });
+        }
 
-        // Check Password
+        // normalize email safely
+        const cleanEmail = email.trim().toLowerCase();
+
+        // Find user
+        const user = await User.findOne({
+            email: new RegExp('^' + cleanEmail + '$', 'i')
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: "Invalid Credentials" });
+        }
+
+        // Check password
+        if (!user.password) {
+            return res.status(500).json({ message: "Password not set" });
+        }
+
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ message: "Invalid Credentials" });
 
-        // Create JWT Token (The "ID Card" for the frontend)
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+        if (!isMatch) {
+            return res.status(400).json({ message: "Invalid Credentials" });
+        }
+
+        // JWT
+        const token = jwt.sign(
+            { id: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: '30d' }
+        );
 
         res.json({
             token,
             user: { id: user._id, name: user.name, email: user.email }
         });
+
     } catch (error) {
+        console.error("❌ LOGIN ERROR:", error.message);
         res.status(500).json({ message: error.message });
     }
 };
-
 // 🌐 GOOGLE AUTH LOGIC
 exports.googleAuth = async (req, res) => {
     try {
