@@ -18,6 +18,9 @@ exports.registerUser = async (req, res) => {
         if (userExists) return res.status(400).json({ message: "User already exists" });
 
         // Hash the password (Security)
+        if (!password) {
+            return res.status(400).json({ message: "Password is required" });
+        }
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -45,6 +48,16 @@ exports.loginUser = async (req, res) => {
         if (!user) return res.status(400).json({ message: "Invalid Credentials" });
 
         // Check Password
+        if (!password) {
+            return res.status(400).json({ message: "Password is required" });
+        }
+
+        if (!user.password) {
+            return res.status(400).json({ 
+                message: "This account was created using Google Sign-In. Please use the 'Sign in with Google' button." 
+            });
+        }
+
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ message: "Invalid Credentials" });
 
@@ -228,6 +241,9 @@ exports.resetPassword = async (req, res) => {
         }
 
         // Hash the new password
+        if (!req.body.password) {
+            return res.status(400).json({ message: "New password is required" });
+        }
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(req.body.password, salt);
 
