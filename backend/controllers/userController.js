@@ -75,6 +75,7 @@ exports.loginUser = async (req, res) => {
             });
         }
 
+
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
@@ -268,6 +269,10 @@ exports.resetPassword = async (req, res) => {
             return res.status(400).json({ message: 'Invalid token' });
         }
 
+        // Validate new password
+        if (!req.body.password) {
+            return res.status(400).json({ message: "New password is required" });
+        }
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(req.body.password, salt);
 
