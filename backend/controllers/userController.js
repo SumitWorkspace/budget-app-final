@@ -12,27 +12,30 @@ exports.registerUser = async (req, res) => {
     try {
         const { name, email, password, phone } = req.body;
 
-        // ✅ VALIDATION
+        // ✅ STRICT VALIDATION (CRITICAL FIX)
         if (!name || !email || !password || !phone) {
             return res.status(400).json({ message: "All fields are required" });
         }
 
         const cleanEmail = email.trim().toLowerCase();
 
-        // ✅ CHECK EXISTING USER
         const userExists = await User.findOne({ email: cleanEmail });
         if (userExists) {
             return res.status(400).json({ message: "User already exists" });
         }
 
-        // 🔥 HASH PASSWORD (CRITICAL FIX)
+        // 🔥 SAFETY CHECK
+        if (typeof password !== "string" || password.length < 4) {
+            return res.status(400).json({ message: "Invalid password" });
+        }
+
+        // 🔐 HASH PASSWORD
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        console.log("✅ REGISTER BODY:", req.body);
-        console.log("🔐 HASHED PASSWORD:", hashedPassword);
+        console.log("REGISTER BODY:", req.body);
+        console.log("HASHED PASSWORD:", hashedPassword);
 
-        // ✅ CREATE USER
         const user = await User.create({
             name,
             email: cleanEmail,
@@ -40,18 +43,13 @@ exports.registerUser = async (req, res) => {
             phone
         });
 
-        res.status(201).json({
-            message: "User registered successfully",
-            _id: user._id
-        });
+        res.status(201).json({ message: "User registered successfully" });
 
     } catch (error) {
-        console.error("❌ REGISTER ERROR:", error.message);
+        console.error("REGISTER ERROR:", error.message);
         res.status(500).json({ message: error.message });
     }
 };
-
-
 // ================= LOGIN =================
 exports.loginUser = async (req, res) => {
     try {
