@@ -64,23 +64,29 @@ exports.loginUser = async (req, res) => {
 
         const cleanEmail = email.trim().toLowerCase();
 
-        const user = await User.findOne({ email: cleanEmail });
+        const user = await User.findOne({
+            email: new RegExp(`^${cleanEmail}$`, 'i')
+        });
 
         if (!user) {
-            return res.status(400).json({ message: "Invalid credentials" });
+            return res.status(400).json({ message: "User not found" });
         }
 
-        // 🔥 CRITICAL CHECK
-        if (!user.password || user.password.length < 20) {
+        if (!user.password) {
             return res.status(400).json({
-                message: "Account corrupted. Please register again."
+                message: "Account not properly registered"
             });
         }
 
+        console.log("INPUT PASSWORD:", password);
+        console.log("HASHED PASSWORD:", user.password);
+
         const isMatch = await bcrypt.compare(password, user.password);
 
+        console.log("MATCH RESULT:", isMatch);
+
         if (!isMatch) {
-            return res.status(400).json({ message: "Invalid credentials" });
+            return res.status(400).json({ message: "Wrong password" });
         }
 
         const token = jwt.sign(
@@ -99,11 +105,10 @@ exports.loginUser = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ LOGIN ERROR:", error.message);
+        console.error("LOGIN ERROR:", error.message);
         res.status(500).json({ message: error.message });
     }
 };
-
 
 // ================= GOOGLE AUTH =================
 exports.googleAuth = async (req, res) => {
