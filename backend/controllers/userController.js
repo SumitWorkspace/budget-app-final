@@ -104,7 +104,11 @@ exports.loginUser = async (req, res) => {
 // ================= GOOGLE AUTH =================
 exports.googleAuth = async (req, res) => {
     try {
-        const { credential } = req.body;
+        const credential = req.body.credential || req.body.token;
+
+        if (!credential) {
+            return res.status(400).json({ message: "No credential received" });
+        }
 
         const ticket = await client.verifyIdToken({
             idToken: credential,
@@ -112,6 +116,11 @@ exports.googleAuth = async (req, res) => {
         });
 
         const payload = ticket.getPayload();
+
+        if (!payload) {
+            return res.status(400).json({ message: "Invalid Google token" });
+        }
+
         const email = payload.email.toLowerCase();
         const name = payload.name;
 
@@ -131,20 +140,23 @@ exports.googleAuth = async (req, res) => {
         const token = jwt.sign(
             { id: user._id },
             process.env.JWT_SECRET,
-            { expiresIn: '30d' }
+            { expiresIn: "30d" }
         );
 
         res.json({
             token,
-            user: { id: user._id, name: user.name, email: user.email }
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email
+            }
         });
 
     } catch (error) {
-        console.error("❌ Google Auth Error:", error.message);
-        res.status(500).json({ message: "Google Authentication failed" });
+        console.error("🔥 GOOGLE AUTH ERROR:", error.message);
+        res.status(500).json({ message: error.message });
     }
 };
-
 
 // ================= PROFILE =================
 exports.getUserProfile = async (req, res) => {
