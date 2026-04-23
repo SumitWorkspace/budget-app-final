@@ -129,12 +129,12 @@ exports.googleAuth = async (req, res) => {
         if (!user) {
             const randomPassword = crypto.randomBytes(16).toString('hex');
             const hashedPassword = await bcrypt.hash(randomPassword, 10);
-
-            user = await User.create({
-                name,
-                email,
-                password: hashedPassword
-            });
+user = await User.create({
+  name,
+  email,
+  password: hashedPassword,
+  phone: "0000000000" // 🔥 dummy phone to bypass validation
+});
         }
 
         const token = jwt.sign(
