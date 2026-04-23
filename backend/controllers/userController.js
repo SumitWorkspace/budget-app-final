@@ -54,6 +54,7 @@ exports.registerUser = async (req, res) => {
 
 
 // ================= LOGIN =================
+
 exports.loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -64,20 +65,14 @@ exports.loginUser = async (req, res) => {
 
         const cleanEmail = email.trim().toLowerCase();
 
-        const user = await User.findOne({
-            email: new RegExp(`^${cleanEmail}$`, 'i')
-        });
+        const user = await User.findOne({ email: cleanEmail });
 
         if (!user) {
             return res.status(400).json({ message: "User not found" });
         }
 
-        if (!user.password) {
-            return res.status(400).json({
-                message: "Account not properly registered"
-            });
-        }
-
+        // 🔍 DEBUG (TEMPORARY)
+        console.log("USER FROM DB:", user);
         console.log("INPUT PASSWORD:", password);
         console.log("HASHED PASSWORD:", user.password);
 
@@ -86,7 +81,7 @@ exports.loginUser = async (req, res) => {
         console.log("MATCH RESULT:", isMatch);
 
         if (!isMatch) {
-            return res.status(400).json({ message: "Wrong password" });
+            return res.status(400).json({ message: "Invalid credentials" });
         }
 
         const token = jwt.sign(
@@ -109,7 +104,6 @@ exports.loginUser = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
-
 // ================= GOOGLE AUTH =================
 exports.googleAuth = async (req, res) => {
     try {
