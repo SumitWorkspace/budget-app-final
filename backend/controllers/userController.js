@@ -7,229 +7,260 @@ const { OAuth2Client } = require('google-auth-library');
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 
-// 📝 SIGNUP LOGIC
+// ================= REGISTER =================
 exports.registerUser = async (req, res) => {
     try {
-        const { name, password } = req.body;
-        const email = req.body.email.trim().toLowerCase();
+        const { name, email, password, phone } = req.body;
 
-        // Check if user already exists
-        const userExists = await User.findOne({ email });
-        if (userExists) return res.status(400).json({ message: "User already exists" });
-
-        // Hash the password (Security)
-        if (!password) {
-            return res.status(400).json({ message: "Password is required" });
+        // ✅ VALIDATION
+        if (!name || !email || !password || !phone) {
+            return res.status(400).json({ message: "All fields are required" });
         }
+
+        const cleanEmail = email.trim().toLowerCase();
+
+        // ✅ CHECK EXISTING USER
+        const userExists = await User.findOne({ email: cleanEmail });
+        if (userExists) {
+            return res.status(400).json({ message: "User already exists" });
+        }
+
+        // 🔥 HASH PASSWORD (CRITICAL FIX)
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Create User
+        console.log("✅ REGISTER BODY:", req.body);
+        console.log("🔐 HASHED PASSWORD:", hashedPassword);
+
+        // ✅ CREATE USER
         const user = await User.create({
             name,
-            email,
-            password: hashedPassword
+            email: cleanEmail,
+            password: hashedPassword,
+            phone
         });
 
-        res.status(201).json({ message: "User registered successfully" });
+        res.status(201).json({
+            message: "User registered successfully",
+            _id: user._id
+        });
+
     } catch (error) {
+        console.error("❌ REGISTER ERROR:", error.message);
         res.status(500).json({ message: error.message });
     }
 };
 
-// 🔑 LOGIN LOGIC
+
+// ================= LOGIN =================
 exports.loginUser = async (req, res) => {
     try {
-        const { password } = req.body;
-        const email = req.body.email.trim();
+        const { email, password } = req.body;
 
-        // Find User case-insensitively
-        const user = await User.findOne({ email: new RegExp('^' + email + '$', 'i') });
-        if (!user) return res.status(400).json({ message: "Invalid Credentials" });
-
-        // Check Password
-        if (!password) {
-            return res.status(400).json({ message: "Password is required" });
+        // ✅ VALIDATION
+        if (!email || !password) {
+            return res.status(400).json({ message: "Email & password required" });
         }
 
+        const cleanEmail = email.trim().toLowerCase();
+
+        const user = await User.findOne({ email: cleanEmail });
+
+        if (!user) {
+            return res.status(400).json({ message: "Invalid credentials" });
+        }
+
+        // 🔥 FIX: HANDLE USERS WITHOUT PASSWORD
         if (!user.password) {
-            return res.status(400).json({ 
-                message: "This account was created using Google Sign-In. Please use the 'Sign in with Google' button." 
+            return res.status(400).json({
+                message: "Account not properly registered. Please sign up again."
             });
         }
 
+
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ message: "Invalid Credentials" });
 
-        // Create JWT Token (The "ID Card" for the frontend)
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+        if (!isMatch) {
+            return res.status(400).json({ message: "Invalid credentials" });
+        }
 
-        res.json({
+        // 🔐 JWT
+        const token = jwt.sign(
+            { id: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: "30d" }
+        );
+
+        res.status(200).json({
             token,
-            user: { id: user._id, name: user.name, email: user.email }
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email
+            }
         });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
+
+    } catch (err) {
+        console.error("❌ LOGIN ERROR:", err.message);
+        res.status(500).json({ message: err.message });
     }
 };
 
-// 🌐 GOOGLE AUTH LOGIC
+
+// ================= GOOGLE AUTH =================
 exports.googleAuth = async (req, res) => {
     try {
         const { credential } = req.body;
-        
-        // Verify the Google token
+
         const ticket = await client.verifyIdToken({
             idToken: credential,
             audience: process.env.GOOGLE_CLIENT_ID,
         });
-        
+
         const payload = ticket.getPayload();
         const { email, name } = payload;
-        
-        // Check if user already exists
+
         let user = await User.findOne({ email });
-        
+
         if (!user) {
-            // Generate a random highly secure password for google users
-            const generatedPassword = crypto.randomBytes(16).toString('hex');
+            // 🔥 generate password for consistency
+            const randomPassword = crypto.randomBytes(16).toString('hex');
             const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(generatedPassword, salt);
-            
-            // Create the new user
+            const hashedPassword = await bcrypt.hash(randomPassword, salt);
+
             user = await User.create({
                 name,
                 email,
                 password: hashedPassword
             });
         }
-        
-        // Create JWT Token
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '30d' });
-        
+
+        const token = jwt.sign(
+            { id: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: '30d' }
+        );
+
         res.json({
             token,
             user: { id: user._id, name: user.name, email: user.email }
         });
+
     } catch (error) {
         console.error("Google Auth Error:", error);
-        res.status(500).json({ message: "Google Authentication failed", error: error.message });
+        res.status(500).json({ message: "Google Authentication failed" });
     }
 };
 
-// 👤 GET USER PROFILE (Get details of logged-in user)
+
+// ================= PROFILE =================
 exports.getUserProfile = async (req, res) => {
     try {
-        // req.user.id humein 'protect' middleware se milta hai
-        const user = await User.findById(req.user.id).select("-password"); // Password hide kar do
-        
-        if (user) {
-            res.json(user);
-        } else {
-            res.status(404).json({ message: "User not found" });
-        }
+        const user = await User.findById(req.user.id).select("-password");
+
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        res.json(user);
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-// ⚙️ UPDATE USER PROFILE (Change name or email)
+
+// ================= UPDATE PROFILE =================
 exports.updateUserProfile = async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
 
-        if (user) {
-            // Agar body mein naya naam/email hai toh badlo, warna purana hi rakho
-            user.name = req.body.name || user.name;
-            user.email = req.body.email || user.email;
+        if (!user) return res.status(404).json({ message: "User not found" });
 
-            // Agar user password badalna chahta hai
-            if (req.body.password) {
-                const salt = await bcrypt.genSalt(10);
-                user.password = await bcrypt.hash(req.body.password, salt);
-            }
+        user.name = req.body.name || user.name;
+        user.email = req.body.email || user.email;
 
-            const updatedUser = await user.save();
-
-            res.json({
-                _id: updatedUser._id,
-                name: updatedUser.name,
-                email: updatedUser.email,
-                // Dashboard update ke liye naya user object bhej rahe hain
-            });
-        } else {
-            res.status(404).json({ message: "User not found" });
+        if (req.body.password) {
+            const salt = await bcrypt.genSalt(10);
+            user.password = await bcrypt.hash(req.body.password, salt);
         }
+
+        const updatedUser = await user.save();
+
+        res.json({
+            _id: updatedUser._id,
+            name: updatedUser.name,
+            email: updatedUser.email
+        });
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
-// ⚙️ UPDATE USER SETTINGS
+
+
+// ================= SETTINGS =================
 exports.updateSettings = async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
         if (!user) return res.status(404).json({ message: "User not found" });
 
-        // Sirf wahi settings update karo jo body mein aayi hain
-        // Spread operator use kiya hai taaki baaki settings delete na ho jayein
         user.settings = { ...user.settings.toObject(), ...req.body.settings };
-        
+
         await user.save();
+
         res.json({ message: "Settings updated", settings: user.settings });
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-// 📨 FORGOT PASSWORD
+
+// ================= FORGOT PASSWORD =================
 exports.forgotPassword = async (req, res) => {
     try {
-        const email = req.body.email.trim();
-        const user = await User.findOne({ email: new RegExp('^' + email + '$', 'i') });
+        const email = req.body.email?.trim();
 
-        if (!user) {
-            return res.status(404).json({ message: "No user found with that email" });
+        if (!email) {
+            return res.status(400).json({ message: "Email required" });
         }
 
-        // Generate token
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: "No user found" });
+        }
+
         const resetToken = crypto.randomBytes(20).toString('hex');
 
-        // Hash token and save to database
         user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-        user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+        user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
 
         await user.save({ validateBeforeSave: false });
 
-        // Create reset URL (This points to the React frontend)
         const resetUrl = `http://localhost:5173/reset-password/${resetToken}`;
 
-        const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please click the link below to reset your password:\n\n${resetUrl}\n\nIf you did not request this, please ignore this email and your password will remain unchanged.`;
+        const message = `Reset your password:\n${resetUrl}`;
 
-        try {
-            await sendEmail({
-                email: user.email,
-                subject: 'SmartBudget Password Reset Token',
-                message
-            });
+        await sendEmail({
+            email: user.email,
+            subject: 'Password Reset',
+            message
+        });
 
-            res.status(200).json({ message: 'Email sent successfully. Please check your console or inbox.' });
-        } catch (error) {
-            console.error(error);
-            user.resetPasswordToken = undefined;
-            user.resetPasswordExpire = undefined;
-            await user.save({ validateBeforeSave: false });
-            return res.status(500).json({ message: "Email could not be sent" });
-        }
+        res.json({ message: 'Email sent' });
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-// 🔄 RESET PASSWORD
+
+// ================= RESET PASSWORD =================
 exports.resetPassword = async (req, res) => {
     try {
-        // Get hashed token
-        const resetPasswordToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
+        const resetPasswordToken = crypto.createHash('sha256')
+            .update(req.params.token)
+            .digest('hex');
 
         const user = await User.findOne({
             resetPasswordToken,
@@ -237,22 +268,23 @@ exports.resetPassword = async (req, res) => {
         });
 
         if (!user) {
-            return res.status(400).json({ message: 'Invalid or expired token' });
+            return res.status(400).json({ message: 'Invalid token' });
         }
 
-        // Hash the new password
+        // Validate new password
         if (!req.body.password) {
             return res.status(400).json({ message: "New password is required" });
         }
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(req.body.password, salt);
 
-        // Clear reset token fields
         user.resetPasswordToken = undefined;
         user.resetPasswordExpire = undefined;
+
         await user.save();
 
-        res.status(200).json({ message: 'Password has been reset successfully. You can now log in.' });
+        res.json({ message: 'Password reset successful' });
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

@@ -11,7 +11,7 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", phone: "" });
   const navigate = useNavigate();
 
   const handleGoogleSuccess = async (credentialResponse) => {
@@ -42,13 +42,22 @@ export default function Auth() {
         if (!form.email) return setError("Please enter your email");
         const res = await API.post("/api/users/forgot-password", { email: form.email });
         setSuccessMsg(res.data.message || "Reset link sent!");
-        setForm({ name: "", email: "", password: "" });
+        setForm({ name: "", email: "", password: "", phone: "" });
       } else if (isSignup) {
-        if (!form.name || !form.email || !form.password) return setError("Please fill all fields");
-        await API.post("/api/users/register", form);
+        if (!form.name || !form.email || !form.password || !form.phone)
+  return setError("Please fill all fields");
+       // 🔥 FORMAT PHONE BEFORE SENDING
+const formattedPhone = form.phone.startsWith("91")
+  ? form.phone
+  : "91" + form.phone;
+
+await API.post("/api/users/register", {
+  ...form,
+  phone: formattedPhone
+});
         setIsSignup(false);
         setSuccessMsg("Account created! Please log in.");
-        setForm({ name: "", email: "", password: "" }); // Reset for login
+        setForm({ name: "", email: "", password: "", phone: "" }); // Reset for login
       } else {
         if (!form.email || !form.password) return setError("Please fill all fields");
         const res = await API.post("/api/users/login", {
@@ -167,7 +176,27 @@ export default function Auth() {
                     />
                   </div>
                 </div>
-
+<AnimatePresence mode="popLayout">
+  {!isForgotPassword && isSignup && (
+    <motion.div
+      initial={{ opacity: 0, height: 0, y: -20 }}
+      animate={{ opacity: 1, height: "auto", y: 0 }}
+      exit={{ opacity: 0, height: 0, y: -20 }}
+      className="space-y-1"
+    >
+      <label className="text-sm font-medium text-slate-300 ml-1">Phone</label>
+      <div className="relative group">
+        <input
+          type="text"
+          value={form.phone}
+          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:bg-white/10 transition-all"
+          placeholder="+91..."
+        />
+      </div>
+    </motion.div>
+  )}
+</AnimatePresence>
                 <AnimatePresence mode="popLayout">
                   {!isForgotPassword && (
                     <motion.div 
@@ -279,7 +308,8 @@ export default function Auth() {
                     Already have an account?{" "}
                     <button
                       type="button"
-                      onClick={() => { setIsSignup(false); setError(""); setSuccessMsg(""); setForm({name:"", email:"", password:""}); }}
+                      onClick={() => { setIsSignup(false); setError(""); setSuccessMsg(""); setForm({name:"", email:"", password:"", phone:""});
+                      setForm({name:"", email:"", password:"",phone:""}); }}
                       className="text-white font-semibold hover:text-emerald-400 transition-colors"
                     >
                       Sign in instead
@@ -290,7 +320,7 @@ export default function Auth() {
                     New to SmartBudget?{" "}
                     <button
                       type="button"
-                      onClick={() => { setIsSignup(true); setError(""); setSuccessMsg(""); setForm({name:"", email:"", password:""}); }}
+                      onClick={() => { setIsSignup(true); setError(""); setSuccessMsg(""); setForm({name:"", email:"", password:"", phone:""});}}
                       className="text-white font-semibold hover:text-emerald-400 transition-colors"
                     >
                       Create an account
