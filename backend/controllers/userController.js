@@ -65,20 +65,17 @@ exports.loginUser = async (req, res) => {
 
         const cleanEmail = email.trim().toLowerCase();
 
-        const user = await User.findOne({ email: cleanEmail });
+        // 🔥 FIX HERE
+        const user = await User.findOne({ email: cleanEmail }).select("+password");
 
         if (!user) {
             return res.status(400).json({ message: "User not found" });
         }
 
-        // 🔍 DEBUG (TEMPORARY)
-        console.log("USER FROM DB:", user);
-        console.log("INPUT PASSWORD:", password);
+        console.log("USER:", user);
         console.log("HASHED PASSWORD:", user.password);
 
         const isMatch = await bcrypt.compare(password, user.password);
-
-        console.log("MATCH RESULT:", isMatch);
 
         if (!isMatch) {
             return res.status(400).json({ message: "Invalid credentials" });
